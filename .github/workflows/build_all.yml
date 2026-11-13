@@ -44,7 +44,7 @@ jobs:
 
         - name: Patch Pothos with newer libiio version
           working-directory: ${{runner.workspace}}
-          run: 7z x libiio.zip ; rm "C:/Program Files/PothosSDR/bin/libiio.dll" ; cp "Windows-VS-2022-x64/Release/libiio1.dll" "C:/Program Files/PothosSDR/bin/" ; cp "Windows-VS-2022-x64/Release/libiio1.dll" "C:/Program Files/PothosSDR/bin/libiio.dll" ; cp "Windows-VS-2022-x64/Release/libserialport.dll" "C:/Program Files/PothosSDR/bin/" ; cp "Windows-VS-2022-x64/Release/libxml2.dll" "C:/Program Files/PothosSDR/bin/" ; cp "Windows-VS-2022-x64/Release/libiio1.lib" "C:/Program Files/PothosSDR/lib/libiio.lib" ; cp -r "include/iio" "C:/Program Files/PothosSDR/include/"
+          run: 7z x libiio.zip ; rm "C:/Program Files/PothosSDR/bin/libiio.dll" ; cp "Windows-VS-2022-x64/Release/libiio1.dll" "C:/Program Files/PothosSDR/bin/" ; cp "Windows-VS-2022-x64/Release/libiio1.dll" "C:/Program Files/PothosSDR/bin/libiio.dll" ; cp "Windows-VS-2022-x64/Release/libserialport.dll" "C:/Program Files/PothosSDR/bin/" ; cp "Windows-VS-2022-x64/Release/libserialport.dll" "C:/Program Files/PothosSDR/bin/libserialport-0.dll" ; cp "Windows-VS-2022-x64/Release/libxml2.dll" "C:/Program Files/PothosSDR/bin/" ; cp "Windows-VS-2022-x64/Release/libiio1.lib" "C:/Program Files/PothosSDR/lib/libiio.lib" ; cp -r "include/iio" "C:/Program Files/PothosSDR/include/"
 
         - name: Download SDRPlay API
           run: Invoke-WebRequest -Uri "https://www.sdrpp.org/SDRplay.zip" -OutFile ${{runner.workspace}}/SDRplay.zip
@@ -125,7 +125,7 @@ jobs:
           run: wget https://github.com/analogdevicesinc/libiio/archive/refs/tags/v1.0.0.zip && 7z x v1.0.0.zip && cd libiio-1.0.0 && mkdir build && cd build && cmake -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DCMAKE_BUILD_TYPE=Release .. && make -j3 && sudo make install && cd ../../
 
         - name: Install libad9361
-          run: git clone https://github.com/analogdevicesinc/libad9361-iio && cd libad9361-iio && git checkout v0.4.0 && mkdir build && cd build && cmake -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5 .. && make -j3 && sudo make install && cd ../../
+          run: git clone https://github.com/analogdevicesinc/libad9361-iio && cd libad9361-iio && mkdir build && cd build && cmake -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5 .. && make -j3 && sudo make install && cd ../../
 
         - name: Install LimeSuite
           run: git clone https://github.com/myriadrf/LimeSuite && cd LimeSuite && mkdir builddir && cd builddir && cmake -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DCMAKE_BUILD_TYPE=Release .. && make -j3 && sudo make install && cd ../../
@@ -188,7 +188,7 @@ jobs:
           run: wget https://github.com/analogdevicesinc/libiio/archive/refs/tags/v1.0.0.zip && 7z x v1.0.0.zip && cd libiio-1.0.0 && mkdir build && cd build && cmake -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DCMAKE_BUILD_TYPE=Release .. && make -j3 && sudo make install && cd ../../
 
         - name: Install libad9361
-          run: git clone https://github.com/analogdevicesinc/libad9361-iio && cd libad9361-iio && git checkout v0.4.0 && mkdir build && cd build && cmake -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5 .. && make -j3 && sudo make install && cd ../../
+          run: git clone https://github.com/analogdevicesinc/libad9361-iio && cd libad9361-iio && mkdir build && cd build && cmake -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5 .. && make -j3 && sudo make install && cd ../../
 
         - name: Install LimeSuite
           run: git clone https://github.com/myriadrf/LimeSuite && cd LimeSuite && mkdir builddir && cd builddir && cmake -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DCMAKE_BUILD_TYPE=Release .. && make -j3 && sudo make install && cd ../../
