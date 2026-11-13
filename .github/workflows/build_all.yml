@@ -40,11 +40,11 @@ jobs:
           run: Invoke-WebRequest -Uri "https://www.sdrpp.org/rtlsdr.dll" -OutFile "C:/Program Files/PothosSDR/bin/rtlsdr.dll"
 
         - name: Download libiio
-          run: Invoke-WebRequest -Uri "https://github.com/analogdevicesinc/libiio/releases/download/v0.26/Windows.zip" -OutFile ${{runner.workspace}}/libiio.zip
+          run: Invoke-WebRequest -Uri "https://github.com/analogdevicesinc/libiio/releases/download/v1.0.0/Windows.zip" -OutFile ${{runner.workspace}}/libiio.zip
 
         - name: Patch Pothos with newer libiio version
           working-directory: ${{runner.workspace}}
-          run: 7z x libiio.zip ; rm "C:/Program Files/PothosSDR/bin/libiio.dll" ; cp "Windows-VS-2019-x64/libiio.dll" "C:/Program Files/PothosSDR/bin/" ; cp "Windows-VS-2019-x64/libserialport-0.dll" "C:/Program Files/PothosSDR/bin/" ; cp "Windows-VS-2019-x64/libxml2.dll" "C:/Program Files/PothosSDR/bin/" ; cp "Windows-VS-2019-x64/libiio.lib" "C:/Program Files/PothosSDR/lib/" ; cp "include/iio.h" "C:/Program Files/PothosSDR/include/"
+          run: 7z x libiio.zip ; rm "C:/Program Files/PothosSDR/bin/libiio.dll" ; cp "Windows-VS-2022-x64/Release/libiio1.dll" "C:/Program Files/PothosSDR/bin/" ; cp "Windows-VS-2022-x64/Release/libiio1.dll" "C:/Program Files/PothosSDR/bin/libiio.dll" ; cp "Windows-VS-2022-x64/Release/libserialport.dll" "C:/Program Files/PothosSDR/bin/" ; cp "Windows-VS-2022-x64/Release/libxml2.dll" "C:/Program Files/PothosSDR/bin/" ; cp "Windows-VS-2022-x64/Release/libiio1.lib" "C:/Program Files/PothosSDR/lib/libiio.lib" ; cp -r "include/iio" "C:/Program Files/PothosSDR/include/"
 
         - name: Download SDRPlay API
           run: Invoke-WebRequest -Uri "https://www.sdrpp.org/SDRplay.zip" -OutFile ${{runner.workspace}}/SDRplay.zip
@@ -122,7 +122,7 @@ jobs:
           run: wget https://www.sdrpp.org/ci/SDRplayAPI-macos-installer-universal-3.15.1.pkg && sudo installer -pkg SDRplayAPI-macos-installer-universal-3.15.1.pkg -target /
 
         - name: Install libiio
-          run: wget https://github.com/analogdevicesinc/libiio/archive/refs/tags/v0.25.zip && 7z x v0.25.zip && cd libiio-0.25 && mkdir build && cd build && cmake -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DCMAKE_BUILD_TYPE=Release .. && make -j3 && sudo make install && cd ../../
+          run: wget https://github.com/analogdevicesinc/libiio/archive/refs/tags/v1.0.0.zip && 7z x v1.0.0.zip && cd libiio-1.0.0 && mkdir build && cd build && cmake -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DCMAKE_BUILD_TYPE=Release .. && make -j3 && sudo make install && cd ../../
 
         - name: Install libad9361
           run: git clone https://github.com/analogdevicesinc/libad9361-iio && cd libad9361-iio && git checkout libad9361-iio-v0 && mkdir build && cd build && cmake -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5 .. && make -j3 && sudo make install && cd ../../
@@ -185,7 +185,7 @@ jobs:
           run: wget https://www.sdrpp.org/ci/SDRplayAPI-macos-installer-universal-3.15.1.pkg && sudo installer -pkg SDRplayAPI-macos-installer-universal-3.15.1.pkg -target /
 
         - name: Install libiio
-          run: wget https://github.com/analogdevicesinc/libiio/archive/refs/tags/v0.25.zip && 7z x v0.25.zip && cd libiio-0.25 && mkdir build && cd build && cmake -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DCMAKE_BUILD_TYPE=Release .. && make -j3 && sudo make install && cd ../../
+          run: wget https://github.com/analogdevicesinc/libiio/archive/refs/tags/v1.0.0.zip && 7z x v1.0.0.zip && cd libiio-1.0.0 && mkdir build && cd build && cmake -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DCMAKE_BUILD_TYPE=Release .. && make -j3 && sudo make install && cd ../../
 
         - name: Install libad9361
           run: git clone https://github.com/analogdevicesinc/libad9361-iio && cd libad9361-iio && git checkout libad9361-iio-v0 && mkdir build && cd build && cmake -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5 .. && make -j3 && sudo make install && cd ../../

@@ -5,11 +5,31 @@
 #include <core.h>
 #include <gui/style.h>
 #include <gui/smgui.h>
-#include <iio.h>
+#include <iio/iio.h>
 #include <ad9361.h>
 #include <utils/optionlist.h>
 #include <algorithm>
 #include <regex>
+
+static inline void iio_attr_write_bool_helper(struct iio_channel* chn, const char* name, bool val) {
+    const struct iio_attr* attr = iio_channel_find_attr(chn, name);
+    if (attr) { iio_attr_write_bool(attr, val); }
+}
+
+static inline void iio_attr_write_str_helper(struct iio_channel* chn, const char* name, const char* val) {
+    const struct iio_attr* attr = iio_channel_find_attr(chn, name);
+    if (attr) { iio_attr_write_string(attr, val); }
+}
+
+static inline void iio_attr_write_ll_helper(struct iio_channel* chn, const char* name, long long val) {
+    const struct iio_attr* attr = iio_channel_find_attr(chn, name);
+    if (attr) { iio_attr_write_longlong(attr, val); }
+}
+
+static inline void iio_attr_write_double_helper(struct iio_channel* chn, const char* name, double val) {
+    const struct iio_attr* attr = iio_channel_find_attr(chn, name);
+    if (attr) { iio_attr_write_double(attr, val); }
+}
 
 #define CONCAT(a, b) ((std::string(a) + b).c_str())
 
@@ -112,8 +132,8 @@ private:
         devices.clear();
 
         // Create scan context
-        iio_scan_context* sctx = iio_create_scan_context(NULL, 0);
-        if (!sctx) {
+        struct iio_scan* sctx = iio_scan(NULL, NULL);
+        if (!sctx || iio_err(sctx)) {
             flog::error("Failed get scan context");
             return;
         }
@@ -124,16 +144,12 @@ private:
         std::regex serialRgx("serial=[0-9A-Za-z]+", std::regex::ECMAScript);
 
         // Enumerate devices
-        iio_context_info** ctxInfoList;
-        ssize_t count = iio_scan_context_get_info_list(sctx, &ctxInfoList);
-        if (count < 0) {
-            flog::error("Failed to enumerate contexts");
-            return;
-        }
-        for (ssize_t i = 0; i < count; i++) {
-            iio_context_info* info = ctxInfoList[i];
-            std::string desc = iio_context_info_get_description(info);
-            std::string duri = iio_context_info_get_uri(info);
+        size_t count = iio_scan_get_results_count(sctx);
+        for (size_t i = 0; i < count; i++) {
+            const char* desc_str = iio_scan_get_description(sctx, i);
+            const char* uri_str = iio_scan_get_uri(sctx, i);
+            std::string desc = desc_str ? desc_str : "";
+            std::string duri = uri_str ? uri_str : "";
 
             // Compute an upper case version of the desc for device detection
             std::string upperDesc;
@@ -187,10 +203,9 @@ private:
             // Save device
             devices.define(desc, devName, duri);
         }
-        iio_context_info_list_free(ctxInfoList);
-        
+
         // Destroy scan context
-        iio_scan_context_destroy(sctx);
+        iio_scan_destroy(sctx);
 
 #ifdef __ANDROID__
         // On Android, a default IP entry must be made (TODO: This is not ideal since the IP cannot be changed)
@@ -286,9 +301,10 @@ private:
         if (_this->devDesc.empty() || _this->uri.empty()) { return; }
 
         // Open context
-        _this->ctx = iio_create_context_from_uri(_this->uri.c_str());
-        if (_this->ctx == NULL) {
+        _this->ctx = iio_create_context(NULL, _this->uri.c_str());
+        if (_this->ctx == NULL || iio_err(_this->ctx)) {
             flog::error("Could not open pluto ({})", _this->uri);
+            _this->ctx = NULL;
             return;
         }
 
@@ -297,12 +313,14 @@ private:
         if (_this->phy == NULL) {
             flog::error("Could not connect to pluto phy");
             iio_context_destroy(_this->ctx);
+            _this->ctx = NULL;
             return;
         }
         _this->dev = iio_context_find_device(_this->ctx, "cf-ad9361-lpc");
         if (_this->dev == NULL) {
             flog::error("Could not connect to pluto dev");
             iio_context_destroy(_this->ctx);
+            _this->ctx = NULL;
             return;
         }
 
@@ -311,16 +329,16 @@ private:
         _this->rxLO = iio_device_find_channel(_this->phy, "altvoltage0", true);
 
         // Enable RX LO and disable TX
-        iio_channel_attr_write_bool(iio_device_find_channel(_this->phy, "altvoltage1", true), "powerdown", true);
-        iio_channel_attr_write_bool(_this->rxLO, "powerdown", false);
+        iio_attr_write_bool_helper(iio_device_find_channel(_this->phy, "altvoltage1", true), "powerdown", true);
+        iio_attr_write_bool_helper(_this->rxLO, "powerdown", false);
 
         // Configure RX channel
-        iio_channel_attr_write(_this->rxChan, "rf_port_select", "A_BALANCED");
-        iio_channel_attr_write_longlong(_this->rxLO, "frequency", round(_this->freq));                              // Freq
-        iio_channel_attr_write_bool(_this->rxChan, "filter_fir_en", true);                                          // Digital filter
-        iio_channel_attr_write_longlong(_this->rxChan, "sampling_frequency", round(_this->samplerate));             // Sample rate
-        iio_channel_attr_write(_this->rxChan, "gain_control_mode", _this->gainModes.value(_this->gmId).c_str());    // Gain mode
-        iio_channel_attr_write_double(_this->rxChan, "hardwaregain", _this->gain);                                  // Gain
+        iio_attr_write_str_helper(_this->rxChan, "rf_port_select", "A_BALANCED");
+        iio_attr_write_ll_helper(_this->rxLO, "frequency", round(_this->freq));                              // Freq
+        iio_attr_write_bool_helper(_this->rxChan, "filter_fir_en", true);                                          // Digital filter
+        iio_attr_write_ll_helper(_this->rxChan, "sampling_frequency", round(_this->samplerate));             // Sample rate
+        iio_attr_write_str_helper(_this->rxChan, "gain_control_mode", _this->gainModes.value(_this->gmId).c_str());    // Gain mode
+        iio_attr_write_double_helper(_this->rxChan, "hardwaregain", _this->gain);                                  // Gain
         _this->setBandwidth(_this->bandwidth);
         
         // Configure the ADC filters
@@ -356,7 +374,7 @@ private:
         _this->freq = freq;
         if (_this->running) {
             // Tune device
-            iio_channel_attr_write_longlong(_this->rxLO, "frequency", round(freq));
+            iio_attr_write_ll_helper(_this->rxLO, "frequency", round(freq));
         }
         flog::info("PlutoSDRSourceModule '{0}': Tune: {1}!", _this->name, freq);
     }
@@ -415,7 +433,7 @@ private:
         SmGui::ForceSync();
         if (SmGui::Combo(CONCAT("##_pluto_gainmode_select_", _this->name), &_this->gmId, _this->gainModes.txt)) {
             if (_this->running) {
-                iio_channel_attr_write(_this->rxChan, "gain_control_mode", _this->gainModes.value(_this->gmId).c_str());
+                iio_attr_write_str_helper(_this->rxChan, "gain_control_mode", _this->gainModes.value(_this->gmId).c_str());
             }
             if (!_this->devDesc.empty()) {
                 config.acquire();
@@ -429,7 +447,7 @@ private:
         SmGui::FillWidth();
         if (SmGui::SliderFloatWithSteps(CONCAT("##_pluto_gain__", _this->name), &_this->gain, -1.0f, 73.0f, 1.0f, SmGui::FMT_STR_FLOAT_DB_NO_DECIMAL)) {
             if (_this->running) {
-                iio_channel_attr_write_double(_this->rxChan, "hardwaregain", _this->gain);
+                iio_attr_write_double_helper(_this->rxChan, "hardwaregain", _this->gain);
             }
             if (!_this->devDesc.empty()) {
                 config.acquire();
@@ -442,10 +460,10 @@ private:
 
     void setBandwidth(int bw) {
         if (bw > 0) {
-            iio_channel_attr_write_longlong(rxChan, "rf_bandwidth", bw);
+            iio_attr_write_ll_helper(rxChan, "rf_bandwidth", bw);
         }
         else {
-            iio_channel_attr_write_longlong(rxChan, "rf_bandwidth", std::min<int>(samplerate, 52000000));
+            iio_attr_write_ll_helper(rxChan, "rf_bandwidth", std::min<int>(samplerate, 52000000));
         }
     }
 
@@ -461,39 +479,50 @@ private:
             return;
         }
 
-        // Start streaming
-        iio_channel_enable(rx0_i);
-        iio_channel_enable(rx0_q);
+        // Enable channels in mask
+        unsigned int nbChannels = iio_device_get_channels_count(_this->dev);
+        struct iio_channels_mask* mask = iio_create_channels_mask(nbChannels);
+        if (!mask) {
+            flog::error("Failed to create channels mask");
+            return;
+        }
+        iio_channel_enable(rx0_i, mask);
+        iio_channel_enable(rx0_q, mask);
 
-        // Allocate buffer
-        iio_buffer* rxbuf = iio_device_create_buffer(_this->dev, blockSize, false);
+        // shortcut: assumes buffer index 0 and 4 stream blocks, upgrade when multi-buffer device support needed
+        struct iio_buffer* rxbuf = iio_device_get_buffer(_this->dev, 0);
         if (!rxbuf) {
-            flog::error("Could not create RX buffer");
+            flog::error("Could not get RX buffer");
+            iio_channels_mask_destroy(mask);
+            return;
+        }
+
+        struct iio_stream* rxstream = iio_buffer_create_stream(rxbuf, 4, blockSize, mask);
+        if (!rxstream || iio_err(rxstream)) {
+            flog::error("Could not create RX stream");
+            iio_channels_mask_destroy(mask);
             return;
         }
 
         // Receive loop
         while (true) {
-            // Read samples
-            iio_buffer_refill(rxbuf);
+            const struct iio_block* block = iio_stream_get_next_block(rxstream);
+            if (!block || iio_err(block)) { break; }
 
             // Get buffer pointer
-            int16_t* buf = (int16_t*)iio_buffer_first(rxbuf, rx0_i);
-            if (!buf) { break; }
+            int16_t* buf = (int16_t*)iio_block_first(block, rx0_i);
+            if (!buf || iio_err(buf)) { break; }
 
             // Convert samples to CF32
             volk_16i_s32f_convert_32f((float*)_this->stream.writeBuf, buf, 32768.0f, blockSize * 2);
 
             // Send out the samples
-            if (!_this->stream.swap(blockSize)) { break; };
+            if (!_this->stream.swap(blockSize)) { break; }
         }
 
-        // Stop streaming
-        iio_channel_disable(rx0_i);
-        iio_channel_disable(rx0_q);
-
-        // Free buffer
-        iio_buffer_destroy(rxbuf);
+        // Stop streaming and free resources
+        iio_stream_destroy(rxstream);
+        iio_channels_mask_destroy(mask);
     }
 
     std::string name;
