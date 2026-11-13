@@ -5,12 +5,22 @@
 #include <core.h>
 #include <gui/style.h>
 #include <gui/smgui.h>
+#if __has_include(<iio/iio.h>)
 #include <iio/iio.h>
+#else
+#include <iio.h>
+#endif
+
+#if defined(IIO_TIMEOUT_NONBLOCK)
+#define SDRPP_LIBIIO_V1
+#endif
+
 #include <ad9361.h>
 #include <utils/optionlist.h>
 #include <algorithm>
 #include <regex>
 
+#ifdef SDRPP_LIBIIO_V1
 static inline void iio_attr_write_bool_helper(struct iio_channel* chn, const char* name, bool val) {
     const struct iio_attr* attr = iio_channel_find_attr(chn, name);
     if (attr) { iio_attr_write_bool(attr, val); }
@@ -30,6 +40,12 @@ static inline void iio_attr_write_double_helper(struct iio_channel* chn, const c
     const struct iio_attr* attr = iio_channel_find_attr(chn, name);
     if (attr) { iio_attr_write_double(attr, val); }
 }
+#else
+#define iio_attr_write_bool_helper(chn, name, val) iio_channel_attr_write_bool(chn, name, val)
+#define iio_attr_write_str_helper(chn, name, val) iio_channel_attr_write(chn, name, val)
+#define iio_attr_write_ll_helper(chn, name, val) iio_channel_attr_write_longlong(chn, name, val)
+#define iio_attr_write_double_helper(chn, name, val) iio_channel_attr_write_double(chn, name, val)
+#endif
 
 #define CONCAT(a, b) ((std::string(a) + b).c_str())
 
@@ -131,12 +147,21 @@ private:
         // Clear device list
         devices.clear();
 
+#ifdef SDRPP_LIBIIO_V1
         // Create scan context
         struct iio_scan* sctx = iio_scan(NULL, NULL);
         if (!sctx || iio_err(sctx)) {
             flog::error("Failed get scan context");
             return;
         }
+#else
+        // Create scan context
+        iio_scan_context* sctx = iio_create_scan_context(NULL, 0);
+        if (!sctx) {
+            flog::error("Failed get scan context");
+            return;
+        }
+#endif
 
         // Create parsing regexes
         std::regex backendRgx(".+(?=:)", std::regex::ECMAScript);
@@ -144,12 +169,25 @@ private:
         std::regex serialRgx("serial=[0-9A-Za-z]+", std::regex::ECMAScript);
 
         // Enumerate devices
+#ifdef SDRPP_LIBIIO_V1
         size_t count = iio_scan_get_results_count(sctx);
         for (size_t i = 0; i < count; i++) {
             const char* desc_str = iio_scan_get_description(sctx, i);
             const char* uri_str = iio_scan_get_uri(sctx, i);
             std::string desc = desc_str ? desc_str : "";
             std::string duri = uri_str ? uri_str : "";
+#else
+        iio_context_info** ctxInfoList;
+        ssize_t count = iio_scan_context_get_info_list(sctx, &ctxInfoList);
+        if (count < 0) {
+            flog::error("Failed to enumerate contexts");
+            return;
+        }
+        for (ssize_t i = 0; i < count; i++) {
+            iio_context_info* info = ctxInfoList[i];
+            std::string desc = iio_context_info_get_description(info);
+            std::string duri = iio_context_info_get_uri(info);
+#endif
 
             // Compute an upper case version of the desc for device detection
             std::string upperDesc;
@@ -204,8 +242,15 @@ private:
             devices.define(desc, devName, duri);
         }
 
+#ifdef SDRPP_LIBIIO_V1
         // Destroy scan context
         iio_scan_destroy(sctx);
+#else
+        iio_context_info_list_free(ctxInfoList);
+
+        // Destroy scan context
+        iio_scan_context_destroy(sctx);
+#endif
 
 #ifdef __ANDROID__
         // On Android, a default IP entry must be made (TODO: This is not ideal since the IP cannot be changed)
@@ -301,12 +346,20 @@ private:
         if (_this->devDesc.empty() || _this->uri.empty()) { return; }
 
         // Open context
+#ifdef SDRPP_LIBIIO_V1
         _this->ctx = iio_create_context(NULL, _this->uri.c_str());
         if (_this->ctx == NULL || iio_err(_this->ctx)) {
             flog::error("Could not open pluto ({})", _this->uri);
             _this->ctx = NULL;
             return;
         }
+#else
+        _this->ctx = iio_create_context_from_uri(_this->uri.c_str());
+        if (_this->ctx == NULL) {
+            flog::error("Could not open pluto ({})", _this->uri);
+            return;
+        }
+#endif
 
         // Get phy and device handle
         _this->phy = iio_context_find_device(_this->ctx, "ad9361-phy");
@@ -479,6 +532,7 @@ private:
             return;
         }
 
+#ifdef SDRPP_LIBIIO_V1
         // Enable channels in mask
         unsigned int nbChannels = iio_device_get_channels_count(_this->dev);
         struct iio_channels_mask* mask = iio_create_channels_mask(nbChannels);
@@ -523,6 +577,41 @@ private:
         // Stop streaming and free resources
         iio_stream_destroy(rxstream);
         iio_channels_mask_destroy(mask);
+#else
+        // Start streaming
+        iio_channel_enable(rx0_i);
+        iio_channel_enable(rx0_q);
+
+        // Allocate buffer
+        iio_buffer* rxbuf = iio_device_create_buffer(_this->dev, blockSize, false);
+        if (!rxbuf) {
+            flog::error("Could not create RX buffer");
+            return;
+        }
+
+        // Receive loop
+        while (true) {
+            // Read samples
+            iio_buffer_refill(rxbuf);
+
+            // Get buffer pointer
+            int16_t* buf = (int16_t*)iio_buffer_first(rxbuf, rx0_i);
+            if (!buf) { break; }
+
+            // Convert samples to CF32
+            volk_16i_s32f_convert_32f((float*)_this->stream.writeBuf, buf, 32768.0f, blockSize * 2);
+
+            // Send out the samples
+            if (!_this->stream.swap(blockSize)) { break; };
+        }
+
+        // Stop streaming
+        iio_channel_disable(rx0_i);
+        iio_channel_disable(rx0_q);
+
+        // Free buffer
+        iio_buffer_destroy(rxbuf);
+#endif
     }
 
     std::string name;
